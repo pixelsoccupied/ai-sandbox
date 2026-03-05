@@ -34,7 +34,7 @@ Generation of a new set of Policies which are correct for the new release versio
 
 Starting from an existing deployment of clusters managed by an ACM hub cluster. The hub has policies which define the desired configuration state for the clusters at the current (e.g. 4.18) release. The agent provides the following capabilities:
 - Assists the user by creating a complete set of policies for the next release (e.g. 4.20) through merging new RDS reference content and existing customizations from the existing deployment
-- Verifies the syntactical correctness of the policies (and dry-run apply to a hub as a validation layer)
+- Validates the correctness of the policies (dry-run apply to a hub in POC, compliance checking in Phase 2)
 
 POC targets the full RAN DU SNO PolicyGenerator set:
 - [acm-common-ranGen.yaml](https://github.com/openshift-kni/telco-reference/blob/main/telco-ran/configuration/argocd/example/acmpolicygenerator/acm-common-ranGen.yaml) (common — waves 1-2)
@@ -99,7 +99,7 @@ The **agent** is an AI model with access to tools (K8s API, Git, PolicyGenerator
 The agent provides three distinct capabilities that are independently valuable and composed into the end-to-end update flow:
 
 1. **EXPLAIN** — Analyze the diff between RDS reference versions and produce a structured impact summary with per-CR detail. Useful standalone for planning, independent of merging. Also useful to the agent itself for determining merge behavior — the structured output informs which CRs need matching and what kind of changes to expect.
-2. **MERGE** — N-way merge: a series of ordered, incremental 2-way merges. Start with existing partner policies → merge reference updates → merge new functionality requested by the partner → etc. Each step is incremental. Matches CRs by GVK + resource identity with confidence-based matching (exact/fuzzy/none). Reuses EXPLAIN output to scope the merge. Produces syntax-validated output. Useful standalone for generating merged configs without the full validation flow.
+2. **MERGE** — N-way merge: a series of ordered, incremental 2-way merges. Start with existing partner policies → merge reference updates → merge new functionality requested by the partner → etc. Each step is incremental. Matches CRs by GVK + resource identity with confidence-based matching (exact/fuzzy/none). Reuses EXPLAIN output to scope the merge. Useful standalone for generating merged configs without the full validation flow.
 3. **VALIDATE** — Given NonCompliant policies on a hub, diagnose the root cause from violation messages, fix the config, and retry. Useful standalone for any compliance issue, not just version updates. Could integrate with or complement anomaly detection work.
 
 The end-to-end update workflow (DETECT → EXPLAIN → MERGE → VALIDATE → COMPLIANT) composes all three: EXPLAIN informs MERGE, and VALIDATE is invoked to drive policies to compliance.
@@ -194,7 +194,6 @@ Produce updated policies that incorporate reference changes while preserving par
   This is where agent reasoning adds real value — examining field structure to identify renamed or restructured CRs. The agent never silently assumes a fuzzy match; low confidence always escalates to the user.
 - For matched CRs, compares the partner's version against EXPLAIN's reference change set to detect overlaps and conflicts. Where reference changes don't touch customized fields, they are included in the merge plan directly. User customizations are preserved by default — the merge does not attempt to classify them as intentional vs. stale (see Future Scope). True conflicts (user and reference both modified the same field) are flagged for human review at the HITL gate.
 - Produces a merge plan (add/update/remove CRs, mapped back to whichever policy file they live in). Note on CR removal semantics: removing a CR from a policy doesn't remove it from managed clusters — the policy simply stops watching it. To actually trigger removal from managed clusters, a policy with `complianceType: mustNotHave` is needed. If removal comes from the reference, the reference should include the removal policy. The agent needs to be aware of complianceType semantics when generating the merge plan.
-- Produces syntax-validated output. Additionally, dry-run apply to a hub serves as a validation layer before needing a spoke cluster.
 - Merge engine writes the plan to local user files in batch (no cluster interaction).
 - Identifies new hub templates that need values (templates added by the reference that weren't in the partner's previous version). This is included in the agent's output report.
 
@@ -246,8 +245,9 @@ Progressively validate merged policies — each phase catches a different class 
 *HITL: human must explicitly approve before any policy is applied to any cluster. Each validation retry requires human approval — the agent proposes a fix, the user reviews and approves before the next attempt. If max retries are exceeded, the agent escalates to human.*
 
 **Phase 1: Schema validation** *(POC scope)*
-- Client-side dry run of merged Policy CRs against K8s API — catches schema violations, unknown fields, invalid references
+- Dry-run apply to a hub (`--dry-run=server`) — catches schema violations, unknown fields, invalid references without needing a spoke cluster
 - This proves the config is well-formed. It does NOT prove functional correctness.
+- In the end-to-end flow, the agent automatically runs this after MERGE — no separate user action needed.
 
 **Phase 2: Inform mode (semantic correctness)** *(post-POC)*
 - With human approval, apply policies to lab hub in `inform` mode — **no changes are made to managed clusters**
