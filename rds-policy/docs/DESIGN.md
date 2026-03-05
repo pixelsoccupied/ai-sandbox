@@ -131,9 +131,10 @@ The agent assists users in generating valid policies for the target RDS version,
 Determine that an update to the policies is needed, extract the required inputs, and gather the current policy set.
 
 Required inputs (from prompt or cluster inspection):
-- **Policy source** — where to read the partner's current policies from. Options:
-  - Hub cluster: specify by namespace, label, binding criteria, or "policies bound to cluster X". Note: in hub mode, the agent works at the Policy CR level (no PolicyGenerator on hub).
-  - Disk / git directory: the agent has access to PolicyGenerator YAML and can work at that level.
+- **Policy source** — the agent can read the partner's current policies from multiple sources (not mutually exclusive):
+  - Hub cluster: specify by namespace, label, binding criteria, or "policies bound to cluster X". On the hub, the agent works at the Policy CR level (PolicyGenerator does not appear on the hub).
+  - Disk / git directory: the agent has access to PolicyGenerator YAML and can work and generate at that level.
+  - When both are available, the agent uses both — e.g. PolicyGenerator from disk for structure, hub for deployed state.
 - **Current version** — what RDS version and profile (e.g. DU vs Core vs Hub) the partner is running (e.g. 4.18). Phase 1: user provides this. Phase 2: the agent may derive it from the policies.
 - **Target version** — what RDS version to update to (e.g. 4.20)
 - **New functionality** — optional prompt describing additional features/changes to incorporate (e.g. "add logging health check", "enable workload partitioning")
