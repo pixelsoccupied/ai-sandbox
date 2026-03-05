@@ -49,6 +49,7 @@ See section 5 for details.
 - Cluster upgrade orchestration (platform upgrades, IBU seed images — agent handles Day 2 config policies only)
 - New hardware + version update
 - Fresh installs
+- Writing to the cluster — the agent does not persist any resources to etcd in POC. Dry-run validation (`--dry-run=server`) is read-only server-side validation. Actual policy application (writing to etcd) requires human action outside the agent.
 - Dynamic live cluster/fleet state updates — the agent does static generation of policies to govern the desired state of a fleet of clusters after moving to a new version; it does not react to or update policies based on dynamic live cluster state
 
 ### Post-POC / Phase 2
@@ -198,7 +199,7 @@ Produce updated policies that incorporate reference changes while preserving par
 - Merge engine writes the plan to local user files in batch (no cluster interaction).
 - Identifies new hub templates that need values (templates added by the reference that weren't in the partner's previous version). This is included in the agent's output report.
 
-*HITL: human reviews merged output via git PR or direct review. The agent does not apply without explicit user request — the user can apply manually or ask the agent to apply on their behalf. In the POC phase, the user can manually apply policies and report back errors or desired changes to the agent.*
+*HITL: human reviews merged output via git PR or direct review. Once the user approves the merged output, the agent proceeds to dry-run validation (Phase 1). The agent does not apply without explicit user request — the user can apply manually or ask the agent to apply on their behalf. In the POC phase, the user can manually apply policies and report back errors or desired changes to the agent.*
 
 Note: hypothetical example for illustration — applying the changes from EXPLAIN above to a partner's config. The partner's policy names and structure differ from the reference — the agent matches by CR content, not policy name.
 
@@ -248,7 +249,7 @@ Progressively validate merged policies — each phase catches a different class 
 **Phase 1: Schema validation** *(POC scope)*
 - Dry-run apply to a hub (`--dry-run=server`) — catches schema violations, unknown fields, invalid references without needing a spoke cluster
 - This proves the config is well-formed. It does NOT prove functional correctness.
-- In the end-to-end flow, the agent automatically runs this after MERGE — no separate user action needed.
+- In the end-to-end flow, the agent runs this after MERGE once the user approves the merged output.
 
 **Phase 2: Inform mode (semantic correctness)** *(post-POC)*
 - With human approval, apply policies to lab hub in `inform` mode — **no changes are made to managed clusters**
@@ -308,6 +309,6 @@ In production, agent commits to Git → ArgoCD syncs → PolicyGenerator generat
 
 ## 6. Agent Environment
 
-The agent runs standalone — either locally (developer workstation, CI) or in-cluster on the ACM hub. It requires: Git access (for reference configs), PolicyGenerator binary (for reference analysis in EXPLAIN), and optionally K8s API access to a hub. The agent can also read policies from disk/git if hub access is not available. The agent does not apply without explicit user request.
+The agent runs standalone — either locally (developer workstation, CI) or in-cluster on the ACM hub. It requires: Git access (for reference configs), PolicyGenerator binary (for reference analysis in EXPLAIN), and K8s API access to a hub (for dry-run validation in POC, and for reading partner policies when the hub is the input source). The agent can read partner policies from disk/git as an alternative input source, but hub access is required for validation. The agent does not apply without explicit user request.
 
 The agent exposes APIs (e.g. A2A protocol) so that the broader ecosystem (OpenShift Lightspeed, other tools) can integrate with it. The agent is not embedded in any specific product — it is a standalone service that others consume.
