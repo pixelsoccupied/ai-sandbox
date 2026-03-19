@@ -1,0 +1,60 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: acme-group-sno-4.18
+policyDefaults:
+  namespace: acme-group
+  placement:
+    labelSelector:
+      group-du-sno: ""
+      du-profile: "4.18"
+  remediationAction: inform
+  evaluationInterval:
+    compliant: 10m
+    noncompliant: 10s
+policies:
+- name: acme-sno-config
+  policyAnnotations:
+    ran.openshift.io/ztp-deploy-wave: "10"
+  manifests:
+    - path: source-crs/DisableOLMPprof.yaml
+    - path: source-crs/DisableSnoNetworkDiag.yaml
+    - path: source-crs/PtpConfigSlave.yaml
+      patches:
+      - metadata:
+          name: acme-ptp-grandmaster
+        spec:
+          profile:
+            - interface: ens7f0
+              name: grandmaster
+              phc2sysOpts: -a -r -n 24
+              ptp4lOpts: -2 -s --summary_interval -4
+    - path: source-crs/SriovOperatorConfig-SetSelector.yaml
+      complianceType: musthave
+      patches:
+      - spec:
+          configDaemonNodeSelector:
+            node-role.kubernetes.io/worker: ""
+    - path: source-crs/PerformanceProfile-SetSelector.yaml
+      patches:
+      - spec:
+          cpu:
+            isolated: "2-51,54-103"
+            reserved: "0-1,52-53"
+          hugepages:
+            defaultHugepagesSize: 1G
+            pages:
+            - size: 1G
+              count: 16
+          machineConfigPoolSelector:
+            pools.operator.machineconfiguration.openshift.io/master: ""
+          nodeSelector:
+            node-role.kubernetes.io/master: ''
+    - path: source-crs/TunedPerformancePatch.yaml
+      patches:
+      - spec:
+          recommend:
+          - machineConfigLabels:
+              machineconfiguration.openshift.io/role: "master"
+            priority: 19
+            profile: performance-patch

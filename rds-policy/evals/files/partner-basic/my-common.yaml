@@ -1,0 +1,50 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: acme-common-4.18
+policyDefaults:
+  namespace: acme-common
+  placement:
+    labelSelector:
+      common: "true"
+      du-profile: "4.18"
+  remediationAction: inform
+  evaluationInterval:
+    compliant: 10m
+    noncompliant: 10s
+policies:
+- name: acme-common-config
+  policyAnnotations:
+    ran.openshift.io/ztp-deploy-wave: "1"
+  manifests:
+    - path: source-crs/ReduceMonitoringFootprint.yaml
+    - path: source-crs/DefaultCatsrc.yaml
+      patches:
+      - metadata:
+          name: redhat-operators-disconnected
+        spec:
+          displayName: acme-redhat-operators
+          image: registry.acme.internal:5000/olm/redhat-operator-index:v4.18
+    - path: source-crs/DisconnectedICSP.yaml
+      patches:
+      - spec:
+          repositoryDigestMirrors:
+          - mirrors:
+            - registry.acme.internal:5000
+            source: registry.redhat.io
+- name: acme-common-subscriptions
+  policyAnnotations:
+    ran.openshift.io/ztp-deploy-wave: "2"
+  manifests:
+    - path: source-crs/ClusterLogNS.yaml
+    - path: source-crs/ClusterLogOperGroup.yaml
+    - path: source-crs/ClusterLogSubscription.yaml
+    - path: source-crs/ClusterLogOperatorStatus.yaml
+    - path: source-crs/PtpSubscriptionNS.yaml
+    - path: source-crs/PtpSubscription.yaml
+    - path: source-crs/PtpSubscriptionOperGroup.yaml
+    - path: source-crs/PtpOperatorStatus.yaml
+    - path: source-crs/SriovSubscriptionNS.yaml
+    - path: source-crs/SriovSubscriptionOperGroup.yaml
+    - path: source-crs/SriovSubscription.yaml
+    - path: source-crs/SriovOperatorStatus.yaml

@@ -1,0 +1,25 @@
+{
+  "skill_name": "rds-policy-update",
+  "evals": [
+    {
+      "id": 1,
+      "name": "explain-basic",
+      "prompt": "what changed between RDS 4.18 and 4.20?",
+      "expected_output": "Structured diff report covering added, removed, modified CRs with per-CR detail. Should NOT ask for partner policies."
+    },
+    {
+      "id": 2,
+      "name": "merge-basic",
+      "prompt": "upgrade my policies from 4.18 to 4.20, policies are in evals/files/partner-basic",
+      "expected_output": "Merged PolicyGenerator YAML preserving partner customizations with reference updates applied. Partner naming preserved. No optional CRs added.",
+      "files": ["files/partner-basic"]
+    },
+    {
+      "id": 3,
+      "name": "merge-pinned",
+      "prompt": "upgrade my policies from 4.18 to 4.20, policies are in evals/files/partner-pinned",
+      "expected_output": "Merged output where intentionally pinned versions are flagged for review, not auto-updated.",
+      "files": ["files/partner-pinned"]
+    }
+  ]
+}
