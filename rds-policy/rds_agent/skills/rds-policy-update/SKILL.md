@@ -158,9 +158,13 @@ review and push.
    (e.g. `version_4.20/` next to `version_4.18.5/`).
    - Copy the partner's current version directory as the starting point.
 4. **Replace source-crs/** for the target version. Either:
-   - Extract from ZTP container: `oc image extract
-     quay.io/openshift-kni/ztp-site-generator:{version}
-     --path /home/ztp/source-crs/:source-crs/ --confirm`
+   - Extract from ZTP container:
+     ```
+     podman pull registry.redhat.io/openshift4/ztp-site-generate-rhel8:{version}
+     id=$(podman create registry.redhat.io/openshift4/ztp-site-generate-rhel8:{version})
+     podman cp $id:/home/ztp/source-crs/ source-crs/
+     podman rm $id
+     ```
    - Or copy from local reference if available (e.g. `ref-{version}/source-crs/`).
 5. **Verify symlinks** -- check that every `path:` the partner uses in
    their PolicyGenerator YAML still resolves in the new source-crs/.
