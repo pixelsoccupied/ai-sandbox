@@ -36,25 +36,29 @@ def collect_written_files(context=None):
 
 
 def _paths_from_context(context):
-    """Extract file paths from Write tool calls in promptfoo providerResponse metadata."""
+    """Extract file paths from Write and Edit tool calls in promptfoo metadata.
+
+    The agent may use Write for new files or Edit for incremental changes
+    (e.g. cp the partner file via Bash, then Edit to apply merge changes).
+    """
     if not context:
         return []
     provider_response = context.get("providerResponse") or {}
     metadata = provider_response.get("metadata") or context.get("metadata") or {}
     tool_calls = metadata.get("toolCalls") or []
-    paths = []
+    paths = set()
     for call in tool_calls:
-        if call.get("name") != "Write":
+        if call.get("name") not in ("Write", "Edit"):
             continue
         raw = call.get("input", "")
         try:
             args = json.loads(raw) if isinstance(raw, str) else raw
             fp = args.get("file_path", "")
             if fp:
-                paths.append(fp)
+                paths.add(fp)
         except (json.JSONDecodeError, AttributeError):
             continue
-    return paths
+    return list(paths)
 
 
 def parse_pg_docs(written, *, strict=False):

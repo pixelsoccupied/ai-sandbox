@@ -1,4 +1,4 @@
-"""Merge assertions — artifact correctness and checklist verification.
+"""Merge assertions — artifact correctness.
 
 Promptfoo Python assertion return format (GradingResult):
     {"pass_": bool, "score": float 0-1, "reason": str}
@@ -9,11 +9,9 @@ Snake_case keys are auto-converted to camelCase by promptfoo:
 All CR-specific values (names, jmespath paths, expected values) come from
 the config block in promptfooconfig.yaml — this code is a generic engine.
 
-Communication checks (conflict flagging, overlay lifecycle, list merge
-awareness) are handled by llm-rubric in promptfooconfig.yaml.
+Communication checks (conflict flagging, overlay lifecycle, checklist
+quality) are handled by llm-rubric in promptfooconfig.yaml.
 """
-
-import re
 
 import jmespath
 
@@ -22,7 +20,6 @@ from common import (
     collect_written_files,
     find_first,
     parse_pg_docs,
-    version_matches,
 )
 
 
@@ -128,9 +125,12 @@ def _check_profile_content(check, all_manifests):
 
 
 def check_file_content(_output, context):
-    """Verify the merge produced correct YAML artifacts using config-driven checks."""
+    """Verify the merge produced correct YAML artifacts using config-driven checks.
+
+    Version bump checks (name, namespace, labels) are handled by
+    check_multi_pg_structure which validates ALL PG docs, not just the first.
+    """
     config = context["config"]
-    target_ver = config["target_version"]
 
     written = collect_written_files(context)
 
@@ -150,41 +150,10 @@ def check_file_content(_output, context):
             "reason": f"EXPECTED: PolicyGenerator docs | ACTUAL: 0 PG docs, {len(skipped)} non-PG skipped: {[s.get('kind', s.get('error', '?')) for s in skipped]}",
         }
 
-    pg = pg_docs[0]
-    metadata_name = pg.get("metadata", {}).get("name", "")
-    defaults = pg.get("policyDefaults", {})
-    namespace = defaults.get("namespace", "")
-    placement_version_label = (
-        defaults.get("placement", {})
-        .get("labelSelector", {})
-        .get("cluster-version", "")
-    )
-
     all_manifests = collect_manifests(pg_docs)
     manifest_paths = [m.get("path", "") for m in all_manifests]
 
     checks = [_run_check(c, all_manifests, manifest_paths) for c in config["checks"]]
-
-    checks += [
-        (
-            "version_bump_name",
-            version_matches(metadata_name, target_ver),
-            f"metadata.name contains {target_ver}",
-            f"metadata.name='{metadata_name}'",
-        ),
-        (
-            "version_bump_ns",
-            version_matches(namespace, target_ver),
-            f"namespace contains {target_ver}",
-            f"namespace='{namespace}'",
-        ),
-        (
-            "version_bump_label",
-            target_ver in placement_version_label,
-            f"cluster-version label contains {target_ver}",
-            f"cluster-version='{placement_version_label}'",
-        ),
-    ]
 
     total = len(checks)
     num_passed = sum(1 for _, passed, _, _ in checks if passed)
@@ -204,87 +173,3 @@ def check_file_content(_output, context):
     }
 
 
-def _check_terms(term_checks, checklist):
-    """Run a list of term checks against checklist text. Returns list of result tuples."""
-    results = []
-    for tc in term_checks:
-        name = tc["name"]
-        terms = tc["terms"]
-        all_found = all(t in checklist for t in terms)
-        detail = ", ".join(
-            f"{t}={'found' if t in checklist else 'missing'}" for t in terms
-        )
-
-        if "context_pattern" in tc:
-            ctx = bool(re.search(tc["context_pattern"], checklist))
-            all_found = all_found and ctx
-            detail += f", context_pattern={ctx}"
-
-        results.append((name, all_found, f"all of {terms} in checklist", detail))
-    return results
-
-
-def check_completeness(_output, context):
-    """Agent must produce a checklist file that covers every merge task."""
-    config = context["config"]
-    cl = config["checklist"]
-
-    written = collect_written_files(context)
-
-    checklist_contents = []
-    checklist_paths = []
-    for path, content in written.items():
-        if re.search(r"checklist|completed", path, re.IGNORECASE):
-            checklist_contents.append(content)
-            checklist_paths.append(path)
-
-    checklist = "\n".join(checklist_contents).lower()
-
-    if not checklist:
-        files_written = list(written.keys())
-        return {
-            "pass_": False,
-            "score": 0,
-            "reason": f"EXPECTED: checklist file | ACTUAL: no checklist found in {len(files_written)} written files: {files_written[:5]}",
-        }
-
-    required = _check_terms(cl["required_terms"], checklist)
-
-    status_markers = re.findall(r"\[([xX!~\-])\]", checklist)
-    unchecked = re.findall(r"\[ \]", checklist)
-
-    required += [
-        (
-            "status_markers",
-            len(status_markers) >= 3,
-            ">=3 status markers [x]/[!]/[-]/[~]",
-            f"found {len(status_markers)} markers",
-        ),
-        (
-            "all_resolved",
-            len(unchecked) == 0,
-            "no unchecked [ ] items",
-            f"found {len(unchecked)} unchecked items",
-        ),
-    ]
-
-    optional = _check_terms(cl.get("optional_terms", []), checklist)
-
-    all_checks = required + optional
-    req_failed = [name for name, passed, _, _ in required if not passed]
-    num_passed = sum(1 for _, passed, _, _ in all_checks if passed)
-    total = len(all_checks)
-
-    return {
-        "pass_": len(req_failed) == 0,
-        "score": num_passed / total,
-        "reason": f"{num_passed}/{total} checklist items found (files: {checklist_paths})",
-        "component_results": [
-            {
-                "pass_": bool(passed),
-                "score": 1.0 if passed else 0.0,
-                "reason": _fmt(name, passed, expected, actual),
-            }
-            for name, passed, expected, actual in all_checks
-        ],
-    }

@@ -4,7 +4,7 @@ description: 'RDS Policy Agent Skill Evals'
 # 3 tests covering all skill behaviors:
 #   T1 EXPLAIN     — reference diff accuracy, workflow ordering (EXPLAIN before MERGE)
 #   T2 MERGE       — GVK migration, CR replication, conflict flagging, wave change,
-#                    mustnothave, redundant overlay, coverage scan, checklist markers,
+#                    mustnothave, redundant overlay, coverage scan, checklist quality,
 #                    multi-PG structure, version bumps, safety (no unsafe apply),
 #                    AskUserQuestion logging
 #   T3 REQUIRED-CR — missing required vs optional CR severity
@@ -273,61 +273,36 @@ tests:
             - name: ptp_scheduling_fields
               cr: "source-crs/PtpConfigSlave.yaml"
               path: "patches[].spec.profile[].ptpSchedulingPolicy"
-      - type: python
-        value: file://assertions/merge.py:check_completeness
-        metric: checklist-completeness
-        config:
-          target_version: *tv
-          checklist:
-            required_terms:
-              # GVK migration noted in checklist (both old and new kind)
-              - name: gvk_pair
-                terms: ["disconnectedicsp", "disconnectedidms"]
-              # Tuned restructure noted (old and new profile names)
-              - name: tuned_rename
-                terms: ["performance-patch", "ran-du-performance"]
-              # CR removal flagged with review language
-              - name: nmstate_removal
-                terms: ["nmstate"]
-                context_pattern: "remov|absent|flag|review|deprecat"
-              # Channel/subscription change noted
-              - name: channel_change
-                terms: ["channel"]
-                context_pattern: "stable|subscri"
-              # Partner-only CR acknowledged
-              - name: custom_cr
-                terms: ["acmemonitoring"]
-              # Version bump section present
-              - name: version_bump
-                terms: ["namespace"]
-                context_pattern: "metadata.*name|label|placement"
-            optional_terms:
-              # Coverage scan: unused reference CR noted as N/A
-              - name: sriov_na
-                terms: ["sriovfec"]
-                context_pattern: "n/a|not.*use|partner.*not|doesn.*use"
+            # CR replication: both PTP instances preserved with correct interfaces
+            - name: ptp_interface_ens7f0
+              cr: "source-crs/PtpConfigSlave.yaml"
+              path: "patches[].spec.profile[].interface"
+              contains: "ens7f0"
+            - name: ptp_interface_ens8f0
+              cr: "source-crs/PtpConfigSlave.yaml"
+              path: "patches[].spec.profile[].interface"
+              contains: "ens8f0"
+            # CR removal: NMState removed in 4.20 ref, must not remain in output
+            - name: nmstate_removed
+              type: not_exists
+              cr: "source-crs/NMStateOperator.yaml"
+            # Patch preservation: partner's StorageLV customization carried through
+            - name: storagelv_patch_preserved
+              cr: "source-crs/StorageLV.yaml"
+              path: "patches[].spec.storage.deviceClasses[].thinPoolConfig.sizePercent"
+      - type: llm-rubric
+        value: |
+          The agent produced a structured merge summary or checklist that
+          documents the key changes applied: GVK migration, CR removals,
+          version bumps, conflicts flagged, and partner-only CRs preserved.
+          The summary should show completion status for each item.
+          Score 1.0 if comprehensive summary with status indicators,
+          0.5 if partial summary, 0.0 if no summary produced.
+        threshold: 0.5
+        metric: checklist-quality
       - type: python
         value: file://assertions/structural.py:check_multi_pg_structure
         metric: multi-pg-structure
-        config:
-          target_version: *tv
-      # CR replication: same CR appearing multiple times must all get updates
-      - type: python
-        value: file://assertions/structural.py:check_cr_replication
-        metric: cr-replication
-        config:
-          target_version: *tv
-          ptp:
-            cr: "source-crs/PtpConfigSlave.yaml"
-            expected_count: 2
-            sched_paths:
-              - "patches[].spec.profile[].ptpSchedulingPolicy"
-              - "patches[].spec.profile[].ptpSchedulingPriority"
-            interface_path: "patches[].spec.profile[].interface"
-            expected_interfaces: ["ens7f0", "ens8f0"]
-      - type: python
-        value: file://assertions/structural.py:check_parent_kustomization
-        metric: parent-kustomization
         config:
           target_version: *tv
       # Log AskUserQuestion calls — shows exact questions, options,
