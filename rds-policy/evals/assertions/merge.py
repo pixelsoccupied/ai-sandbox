@@ -171,5 +171,3 @@ def check_file_content(_output, context):
             for name, passed, expected, actual in checks
         ],
     }
-
-

@@ -88,5 +88,3 @@ def check_multi_pg_structure(_output, context):
             for name, passed, expected, actual in checks
         ],
     }
-
-
