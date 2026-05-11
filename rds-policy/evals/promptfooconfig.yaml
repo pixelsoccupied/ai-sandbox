@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'RDS Policy Agent Skill Evals'
+description: 'RDS Policy Agent Skill Evals — 3 tests: EXPLAIN accuracy, comprehensive MERGE, required CR severity'
 
-# 3 tests covering all skill behaviors:
+# Test matrix:
 #   T1 EXPLAIN     — reference diff accuracy, workflow ordering (EXPLAIN before MERGE)
 #   T2 MERGE       — GVK migration, CR replication, conflict flagging, wave change,
 #                    mustnothave, redundant overlay, coverage scan, checklist quality,
@@ -21,7 +21,7 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      working_dir: ./fixtures
+      working_dir: '{{ env.RDS_FIXTURES_DIR | default("./fixtures", true) }}'
       setting_sources: ['project']
       skills: ['rds-policy-update']
       append_allowed_tools:
@@ -45,7 +45,7 @@ extensions:
 defaultTest:
   options:
     provider:
-      id: vertex:claude-sonnet-4-6
+      id: '{{ env.PROMPTFOO_GRADING_PROVIDER | default("vertex:claude-sonnet-4-6", true) }}'
       config:
         projectId: '{{ env.ANTHROPIC_VERTEX_PROJECT_ID }}'
         region: '{{ env.CLOUD_ML_REGION }}'
