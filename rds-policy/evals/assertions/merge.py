@@ -55,8 +55,11 @@ def _run_check(check, all_manifests, manifest_paths):
     if check_type == "profile_content":
         return _check_profile_content(check, all_manifests)
 
-    # Field check: cr + path, with optional contains/empty modifiers
-    m = find_first(all_manifests, cr)
+    # Field check: cr + path, with optional contains/empty modifiers.
+    # Search ALL matching manifests (not just the first) because a CR
+    # may appear in multiple policies (e.g. PTP in primary + secondary).
+    matches = [m for m in all_manifests if cr.lower() in m.get("path", "").lower()]
+    m = matches[0] if matches else None
     path = check["path"]
     result = jmespath.search(path, m) if m else None
 
@@ -70,12 +73,15 @@ def _run_check(check, all_manifests, manifest_paths):
 
     if "contains" in check:
         value = check["contains"]
-        found = value in str(result or "")
+        for candidate in matches:
+            candidate_result = jmespath.search(path, candidate)
+            if value in str(candidate_result or ""):
+                return (name, True, f"'{value}' in {path}", "found")
         return (
             name,
-            found,
+            False,
             f"'{value}' in {path}",
-            f"{'found' if found else 'not found'}",
+            "not found",
         )
 
     return (

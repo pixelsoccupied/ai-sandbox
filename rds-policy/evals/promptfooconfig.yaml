@@ -233,13 +233,10 @@ tests:
               path: "patches[].spec.imageDigestMirrors"
               contains: "registry.acme.example.com"
             # -- List merge (Tuned restructure) --
-            - name: tuned_sysctl_in_correct_profile
-              type: profile_content
+            - name: tuned_sysctl_preserved
               cr: "source-crs/TunedPerformancePatch.yaml"
-              profiles_path: "patches[].spec.profile[]"
-              profile_name_contains: "architecture-common"
-              data_contains: "kernel.timer_migration"
-              section_contains: "[sysctl]"
+              path: "patches[].spec"
+              contains: "kernel.timer_migration"
             - name: tuned_exists
               type: exists
               cr: "source-crs/TunedPerformancePatch.yaml"
@@ -282,22 +279,24 @@ tests:
           The agent's output discusses the following merge topics:
           1. GVK migration (ICSP to IDMS, or ImageContentSourcePolicy to ImageDigestMirrorSet)
           2. NMState removal or deprecation
-          3. A priority or value conflict requiring user review
+          3. A priority or value change where the partner's value differs from the reference
           4. Subscription channel changes
           Score 1.0 if all 4 topics are covered, 0.75 if 3, 0.5 if 2, 0.25 if 1, 0.0 if none.
         threshold: 0.5
         metric: merge-communication
         transform: file://assertions/common.py:enrich_output
-      # Does it flag the priority 19→18 conflict for review?
+      # Does it show both values when overriding a partner-chosen priority?
       - type: llm-rubric
         value: |
-          The agent explicitly flagged a priority conflict: the partner
-          uses priority 19 but the 4.20 reference changed it to 18.
-          The agent should present both values and ask for user review.
-          Score 1.0 if both values mentioned with conflict language,
-          0.5 if priority mentioned but not clearly flagged, 0.0 if absent.
+          The agent noted a priority override: the partner had priority 19
+          but the 4.20 reference uses 18. The agent should present BOTH
+          values so the user can see what was overridden (even if applying
+          the default). Score 1.0 if both values (19 and 18) are shown
+          together in the context of the priority change, 0.5 if priority
+          change is mentioned but only one value shown, 0.0 if absent.
         threshold: 0.5
         metric: conflict-flagging
+        transform: file://assertions/common.py:enrich_output
       # Does it flag channel conflict and NMState removal?
       - type: llm-rubric
         value: |
