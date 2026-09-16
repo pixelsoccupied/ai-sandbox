@@ -1,0 +1,21 @@
+# Judge provider for OpenShell sandboxes. Promptfoo's built-in `vertex:`
+# provider insists on Application Default Credentials, which never enter the
+# sandbox; this plain HTTP provider sends the attached provider's placeholder
+# token instead, and the sandbox proxy swaps in the real credential on the way
+# out. The Makefile selects it via PROMPTFOO_GRADING_PROVIDER inside the
+# sandbox; local runs keep the default `vertex:claude-sonnet-5`.
+id: https
+config:
+  url: 'https://aiplatform.googleapis.com/v1/projects/{{ env.ANTHROPIC_VERTEX_PROJECT_ID }}/locations/{{ env.CLOUD_ML_REGION }}/publishers/anthropic/models/claude-sonnet-5:rawPredict'
+  method: POST
+  headers:
+    Authorization: 'Bearer {{ env.GOOGLE_VERTEX_AI_TOKEN }}'
+    Content-Type: application/json
+  body:
+    anthropic_version: vertex-2023-10-16
+    # Leave room for Claude's thinking plus the rubric response.
+    max_tokens: 2048
+    messages:
+      - role: user
+        content: '{{ prompt }}'
+  transformResponse: 'json.content[0].text'

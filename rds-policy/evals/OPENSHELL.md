@@ -1,101 +1,100 @@
 # Run the eval in OpenShell
 
-This creates a confined OpenShell sandbox, installs the eval dependencies, and
-runs Promptfoo inside the sandbox. The agent and grader use separate Vertex
-models, so the policy allows direct Vertex access instead of using OpenShell's
-single-model inference router.
+The Makefile creates a fresh confined sandbox, uploads the checkout, installs
+the pinned dependencies, runs Promptfoo, downloads the results, and deletes the
+sandbox. Vertex credentials never enter the sandbox: they stay on the gateway
+as an OpenShell provider.
 
 ## Prerequisites
 
-- A running OpenShell gateway and access to its Kubernetes namespace
-- `openshell` and `oc` configured locally
-- Google Cloud Application Default Credentials (ADC) with Vertex access
+- OpenShell CLI and gateway version 0.0.116 or newer
+- A registered gateway (`openshell gateway list`)
+- Google Cloud Application Default Credentials with access to the configured
+  Vertex models
 
-Set the values for your environment:
-
-```sh
-export GW=k8s-poc
-export NS=openshell-poc
-export NAME=eval1
-export GCP_PROJECT=your-project
-export GCP_REGION=global
-```
-
-If the gateway is not already reachable, keep this running in another terminal:
+From `rds-policy/evals`, copy the checked-in template and set values for your
+environment:
 
 ```sh
-oc port-forward -n "$NS" pod/openshell-0 18090:8080
+cp .env.example .env
+$EDITOR .env
 ```
 
-## Create and prepare the sandbox
+The gateway name and project ID are runtime configuration, not repository
+defaults. The Makefile loads `.env` when present; Git ignores it.
 
-Run this from the repository root:
+## One-time: register the Vertex provider
 
 ```sh
-openshell -g "$GW" sandbox create --name "$NAME" --no-tty \
-  --env HOME=/tmp \
-  --env CLAUDE_CODE_USE_VERTEX=1 \
-  --env ANTHROPIC_VERTEX_PROJECT_ID="$GCP_PROJECT" \
-  --env CLOUD_ML_REGION="$GCP_REGION" \
-  --env GOOGLE_APPLICATION_CREDENTIALS=/tmp/adc.json \
-  --env UV_PYTHON_DOWNLOADS=never \
-  --policy rds-policy/evals/openshell-policy.yaml \
-  -- sleep infinity </dev/null &
+make openshell-provider
 ```
 
-Apply the cluster DNS workaround, recreate the pod, and wait for it to become
-ready:
+This stores your local gcloud ADC on the gateway as a `google-vertex-ai`
+provider. A sandbox created with `--provider` sees only a placeholder token in
+`GOOGLE_VERTEX_AI_TOKEN`, plus `ANTHROPIC_VERTEX_PROJECT_ID` and
+`CLOUD_ML_REGION`; the sandbox proxy substitutes the real short-lived token on
+requests to `aiplatform.googleapis.com`. The Makefile hands that placeholder to
+both Vertex clients: Claude Code skips its own Google auth
+(`CLAUDE_CODE_SKIP_VERTEX_AUTH=1`) and sends it as its bearer token, and the
+judge switches from Promptfoo's `vertex:` provider, which insists on an ADC
+file, to the plain HTTP provider in `graders/vertex-brokered.yaml`. No
+credential file is uploaded.
+
+## Run
 
 ```sh
-oc patch sandbox "default--$NAME" -n "$NS" --type=json -p \
-  '[{"op":"add","path":"/spec/podTemplate/spec/dnsConfig","value":{"options":[{"name":"ndots","value":"1"}]}}]'
-oc delete pod "default--$NAME" -n "$NS"
-oc wait --for=condition=Ready pod/"default--$NAME" -n "$NS" --timeout=5m
+make openshell-e2e
 ```
 
-Copy local ADC after recreating the pod because `/tmp` is ephemeral:
+One-test smoke run:
 
 ```sh
-oc cp ~/.config/gcloud/application_default_credentials.json \
-  "$NS/default--$NAME:/tmp/adc.json" -c agent
-oc exec -n "$NS" "default--$NAME" -c agent -- chmod 0644 /tmp/adc.json
+make openshell-e2e PROMPTFOO_EVAL_ARGS='--filter-first-n 1'
 ```
 
-This ADC copy is the currently verified interim setup. It places a plaintext
-credential in the sandbox; use a dedicated credential and delete the sandbox
-when the run is complete.
+`openshell-e2e` names the sandbox `rds-<MMDD-HHMMSS>`, creates it, uploads the
+checkout (honoring `.gitignore`, so `node_modules`, `.venv`, and `results/`
+stay local), starts the install-and-eval job, polls until it exits, downloads
+the results, and deletes the sandbox. If the download fails the sandbox is kept
+and the command to retry is printed.
 
-## Run the eval
-
-Use `openshell sandbox exec`, not `oc exec`, so the filesystem and network
-policy remains enforced:
+For a long run you do not want to babysit:
 
 ```sh
-openshell -g "$GW" sandbox exec --name "$NAME" --no-tty -- bash -lc '
-  set -eu
-  git clone -q https://github.com/openshift-kni/ai-sandbox /tmp/ai-sandbox
-  cd /tmp/ai-sandbox/rds-policy/evals
-  make setup
-  npx promptfoo eval --no-cache --filter-first-n 1
-' </dev/null
+make openshell-run OPENSHELL_SANDBOX=rds-full      # create, upload, start
+make openshell-status OPENSHELL_SANDBOX=rds-full   # running? tail of the log
+make openshell-finish OPENSHELL_SANDBOX=rds-full   # download, delete
 ```
 
-The final command runs one test as a smoke check. Run the full suite afterward:
+Install and eval run as one detached job inside the sandbox, polled with short
+`sandbox exec` calls, because attached exec streams are cut by the OpenShift
+route's idle timeout once they go quiet for about a minute. Promptfoo runs with
+`--max-concurrency 1`: concurrent workers can share a socket, and OpenShell
+fails closed when it cannot map that socket to one policy identity.
+
+## Results
+
+Each run lands in `results/<sandbox-name>/`: `promptfoo.json`, `eval.log`,
+`exit-code`, the Promptfoo SQLite state, and any `rds-merge-*` output the agent
+wrote. `results/latest` points to the most recent collected run. Browse it
+with:
 
 ```sh
-openshell -g "$GW" sandbox exec --name "$NAME" --no-tty -- \
-  bash -lc 'cd /tmp/ai-sandbox/rds-policy/evals && make eval' </dev/null
+make openshell-view
 ```
 
-Promptfoo stores results in `/tmp/.promptfoo/promptfoo.db`. OpenShell audit logs
-are available with:
+That sets `PROMPTFOO_CONFIG_DIR` to the downloaded state; your local Promptfoo
+database is untouched.
 
-```sh
-openshell -g "$GW" logs "$NAME" --source sandbox -n 400
-```
+## Policy and image
 
-Delete the credential-bearing sandbox when finished:
+`openshell-policy.yaml` is passed on `sandbox create`. Gateways provisioned by
+the team's `ooo` installer carry a global policy lock, and then the global
+policy applies instead; `openshell policy get <sandbox>` shows which one is in
+effect. Either way the eval needs egress to Vertex, the npm registry, PyPI, and
+GitHub release assets.
 
-```sh
-openshell -g "$GW" sandbox delete "$NAME"
-```
+The sandbox image (`quay.io/telco5gci/sandbox`) ships Python 3.13 and node but
+no uv, and the project requires Python 3.14, so `setup-openshell` installs uv
+and CPython under `/tmp` before `make setup`. Baking those into the image would
+remove that step.

@@ -48,6 +48,8 @@ defaultTest:
         # if either is unset (otherwise these interpolate to empty).
         projectId: '{{ env.ANTHROPIC_VERTEX_PROJECT_ID }}'
         region: '{{ env.CLOUD_ML_REGION }}'
+        # Leave room for Claude's thinking plus the rubric response.
+        max_tokens: 2048
     rubricPrompt: file://graders/judge-prompt.txt
   assert:
     - type: cost
