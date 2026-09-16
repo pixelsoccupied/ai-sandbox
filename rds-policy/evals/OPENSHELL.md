@@ -68,9 +68,12 @@ make openshell-finish OPENSHELL_SANDBOX=rds-full   # download, delete
 
 Install and eval run as one detached job inside the sandbox, polled with short
 `sandbox exec` calls, because attached exec streams are cut by the OpenShift
-route's idle timeout once they go quiet for about a minute. Promptfoo runs with
-`--max-concurrency 1`: concurrent workers can share a socket, and OpenShell
-fails closed when it cannot map that socket to one policy identity.
+route's idle timeout once they go quiet for about a minute. Promptfoo runs
+three tests at a time (`PROMPTFOO_CONCURRENCY`; the full suite takes about
+seven minutes). If a run reports `policy_denied` with "ambiguous shared socket
+ownership", rerun with `PROMPTFOO_CONCURRENCY=1`: that denial hit the judge's
+ADC token refresh once at concurrency 4 and has not recurred since the
+credential file left the sandbox.
 
 ## Results
 

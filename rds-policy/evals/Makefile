@@ -17,6 +17,7 @@ OPENSHELL_SANDBOX ?=
 OPENSHELL_PROVIDER ?= rds-vertex
 VERTEX_AI_REGION ?= global
 PROMPTFOO_EVAL_ARGS ?=
+PROMPTFOO_CONCURRENCY ?= 3
 OSH := $(OPENSHELL) -g "$(OPENSHELL_GATEWAY)"
 # `sandbox upload <repo> /tmp` lands the checkout at /tmp/<repo dir name>.
 OPENSHELL_WORKDIR := /tmp/$(notdir $(REPO_ROOT))/rds-policy/evals
@@ -76,12 +77,12 @@ setup-openshell:
 # Claude Code sends it as its bearer token (Google auth skipped via
 # CLAUDE_CODE_SKIP_VERTEX_AUTH, set at create); the judge switches to the HTTP
 # provider in graders/vertex-brokered.yaml, which does the same.
-# --max-concurrency 1: concurrent workers can share a socket, and OpenShell
-# fails closed when it cannot map that socket to one policy identity.
+# Drop PROMPTFOO_CONCURRENCY to 1 if a run reports policy_denied with
+# "ambiguous shared socket ownership" (seen once, on the old ADC refresh path).
 eval-openshell: preflight
 	mkdir -p "$(SANDBOX_RESULTS_DIR)"
 	ANTHROPIC_AUTH_TOKEN="$$GOOGLE_VERTEX_AI_TOKEN" PROMPTFOO_GRADING_PROVIDER=file://graders/vertex-brokered.yaml PROMPTFOO_DISABLE_TELEMETRY=1 \
-		npx promptfoo eval --no-cache --max-concurrency 1 --output "$(SANDBOX_RESULTS_DIR)/promptfoo.json" $(PROMPTFOO_EVAL_ARGS)
+		npx promptfoo eval --no-cache --max-concurrency $(PROMPTFOO_CONCURRENCY) --output "$(SANDBOX_RESULTS_DIR)/promptfoo.json" $(PROMPTFOO_EVAL_ARGS)
 
 # Detached job: install, run, record the exit code for openshell-wait/status.
 eval-openshell-recorded:
@@ -133,6 +134,7 @@ openshell-upload: check-openshell-sandbox
 openshell-eval: check-openshell-sandbox
 	$(OSH) sandbox exec --name "$(OPENSHELL_SANDBOX)" --no-tty --workdir "$(OPENSHELL_WORKDIR)" \
 		--env PROMPTFOO_EVAL_ARGS="$(PROMPTFOO_EVAL_ARGS)" \
+		--env PROMPTFOO_CONCURRENCY="$(PROMPTFOO_CONCURRENCY)" \
 		-- sh -lc 'mkdir -p $(SANDBOX_RESULTS_DIR); nohup make eval-openshell-recorded >/dev/null 2>&1 </dev/null & echo $$! >$(SANDBOX_RESULTS_DIR)/pid; echo "eval started (pid $$!)"'
 
 openshell-wait: check-openshell-sandbox
