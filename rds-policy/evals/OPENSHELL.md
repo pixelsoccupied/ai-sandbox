@@ -21,7 +21,9 @@ $EDITOR .env
 ```
 
 The gateway name and project ID are runtime configuration, not repository
-defaults. The Makefile loads `.env` when present; Git ignores it.
+defaults. `scripts/openshell-eval.sh` loads `.env` when present; Git ignores
+it. Every `make openshell-<cmd>` target is a one-line wrapper around that
+script's subcommands, so CI can call either.
 
 ## One-time: register the Vertex provider
 
