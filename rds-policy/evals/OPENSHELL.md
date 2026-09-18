@@ -1,6 +1,6 @@
 # Run the eval in OpenShell
 
-The Makefile creates a fresh confined sandbox, uploads the checkout, installs
+One command creates a fresh confined sandbox, uploads the checkout, installs
 the pinned dependencies, runs Promptfoo, downloads the results, and deletes the
 sandbox. Vertex credentials never enter the sandbox: they stay on the gateway
 as an OpenShell provider.
@@ -12,44 +12,39 @@ as an OpenShell provider.
 - Google Cloud Application Default Credentials with access to the configured
   Vertex models
 
-From `rds-policy/evals`, copy the checked-in template and set values for your
-environment:
+There is no config file. The scripts read the environment, and the gateway comes
+from the CLI's own `OPENSHELL_GATEWAY`, so your current gateway is used unless
+you override it:
 
 ```sh
-cp .env.example .env
-$EDITOR .env
+export OPENSHELL_GATEWAY=my-gateway   # optional; only if it is not the current one
 ```
 
-The gateway name and project ID are runtime configuration, not repository
-defaults. The scripts in `scripts/` load `.env` when present; Git ignores it.
-
-Each step is its own small script, and `make openshell-<name>` just runs
-`scripts/<name>.sh`, so CI can call either. The scripts hold nothing but
-`openshell` commands: the CLI reads the gateway from `OPENSHELL_GATEWAY`, so no
-command carries a `-g` flag and you can copy one out and run it by hand.
+Four scripts in `scripts/`, one per step, holding nothing but `openshell`
+commands. `make openshell-<name>` just runs `scripts/<name>.sh`, so CI can call
+either, and you can copy a command out of one and run it by hand.
 
 | Script | What it does |
 | --- | --- |
-| `provider.sh` | one-time: store your gcloud ADC on the gateway |
-| `deploy.sh` | create the sandbox, upload the checkout, start the eval |
-| `status.sh` | is it still running? tail of the log |
-| `wait.sh` | block until it finishes, exit with the eval's code |
-| `collect.sh` | download the results into `results/<sandbox>/` |
-| `undeploy.sh` | delete the sandbox |
-| `e2e.sh` | all of the above in order |
+| `setup.sh` | one-time per gateway: store your gcloud ADC there as a provider |
+| `run.sh` | the whole run: create, upload, eval, collect, delete |
+| `collect.sh` | download one sandbox's results; for retrying a failed download |
+| `clean.sh` | delete one sandbox |
+
+Each script's header lists the variables it reads.
 
 ## One-time: register the Vertex provider
 
 ```sh
-make openshell-provider
+make openshell-setup
 ```
 
 This stores your local gcloud ADC on the gateway as a `google-vertex-ai`
 provider. A sandbox created with `--provider` sees only a placeholder token in
 `GOOGLE_VERTEX_AI_TOKEN`, plus `ANTHROPIC_VERTEX_PROJECT_ID` and
 `CLOUD_ML_REGION`; the sandbox proxy substitutes the real short-lived token on
-requests to `aiplatform.googleapis.com`. The Makefile hands that placeholder to
-both Vertex clients: Claude Code skips its own Google auth
+requests to `aiplatform.googleapis.com`. That placeholder is handed to both
+Vertex clients: Claude Code skips its own Google auth
 (`CLAUDE_CODE_SKIP_VERTEX_AUTH=1`) and sends it as its bearer token, and the
 judge switches from Promptfoo's `vertex:` provider, which insists on an ADC
 file, to the plain HTTP provider in `graders/vertex-brokered.yaml`. No
@@ -58,38 +53,46 @@ credential file is uploaded.
 ## Run
 
 ```sh
-make openshell-e2e
+export VERTEX_AI_PROJECT_ID=my-gcp-project
+make openshell-setup    # once per gateway
+make openshell-run
 ```
 
 One-test smoke run:
 
 ```sh
-make openshell-e2e PROMPTFOO_EVAL_ARGS='--filter-first-n 1'
+make openshell-run PROMPTFOO_EVAL_ARGS='--filter-first-n 1'
 ```
 
-`e2e.sh` names the sandbox `rds-<MMDD-HHMMSS>`, creates it, uploads the
-checkout (honoring `.gitignore`, so `node_modules`, `.venv`, and `results/`
-stay local), starts the install-and-eval job, polls until it exits, downloads
-the results, and deletes the sandbox. If the download fails the sandbox is kept
-and the command to retry is printed.
-
-For a long run you do not want to babysit:
-
-```sh
-make openshell-deploy OPENSHELL_SANDBOX=rds-full     # create, upload, start
-make openshell-status OPENSHELL_SANDBOX=rds-full     # running? tail of the log
-make openshell-collect OPENSHELL_SANDBOX=rds-full    # download the results
-make openshell-undeploy OPENSHELL_SANDBOX=rds-full   # delete the sandbox
-```
+`run.sh` names the sandbox `rds-<MMDD-HHMMSS>`, creates it, uploads the checkout
+(honoring `.gitignore`, so `node_modules`, `.venv`, and `results/` stay local),
+starts the install-and-eval job, polls until it exits, downloads the results,
+and deletes the sandbox. It exits with the eval's own code. Pass
+`OPENSHELL_SANDBOX` to choose the name.
 
 Install and eval run as one detached job inside the sandbox, polled with short
 `sandbox exec` calls, because attached exec streams are cut by the OpenShift
-route's idle timeout once they go quiet for about a minute. Promptfoo runs
-three tests at a time (`PROMPTFOO_CONCURRENCY`; the full suite takes about
-seven minutes). If a run reports `policy_denied` with "ambiguous shared socket
-ownership", rerun with `PROMPTFOO_CONCURRENCY=1`: that denial hit the judge's
-ADC token refresh once at concurrency 4 and has not recurred since the
-credential file left the sandbox.
+route's idle timeout once they go quiet for about a minute. Promptfoo runs three
+tests at a time (`PROMPTFOO_CONCURRENCY`; the full suite takes about seven
+minutes). If a run reports `policy_denied` with "ambiguous shared socket
+ownership", rerun with `PROMPTFOO_CONCURRENCY=1`: that denial hit the judge's ADC
+token refresh once at concurrency 4 and has not recurred since the credential
+file left the sandbox.
+
+If the download fails, `run.sh` keeps the sandbox and prints the retry. Finish it
+by hand:
+
+```sh
+OPENSHELL_SANDBOX=rds-0918-1400 make openshell-collect
+OPENSHELL_SANDBOX=rds-0918-1400 make openshell-clean
+```
+
+To watch a run started in another shell, or to leave one going overnight:
+
+```sh
+make openshell-run &
+openshell sandbox exec --name rds-0918-1400 --no-tty -- tail -n 30 /sandbox/rds-eval-results/eval.log
+```
 
 ## Results
 
@@ -107,7 +110,7 @@ database is untouched.
 
 ## Policy and image
 
-`openshell-policy.yaml` is passed on `sandbox create`. Gateways provisioned by
+`openshell-policy.yaml` is passed on `sandbox create` by `run.sh`. Gateways provisioned by
 the team's `ooo` installer carry a global policy lock, and then the global
 policy applies instead; `openshell policy get <sandbox>` shows which one is in
 effect. Either way the eval needs egress to Vertex, the npm registry, PyPI, and

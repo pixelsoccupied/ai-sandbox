@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Download the finished eval's results into results/<sandbox>/.
+# Download a sandbox's eval results into results/<sandbox>/.
+# run.sh does this for you; use it by hand to retry a failed download.
+#
+# OPENSHELL_SANDBOX=<name> scripts/collect.sh
 set -euo pipefail
-# shellcheck source=scripts/env.sh
-. "$(dirname "$0")/env.sh"
-[ -n "$OPENSHELL_SANDBOX" ] || {
-  echo "set OPENSHELL_SANDBOX (e.g. OPENSHELL_SANDBOX=rds-test)" >&2
-  exit 1
-}
 
-openshell sandbox exec --name "$OPENSHELL_SANDBOX" --no-tty --workdir "$workdir" -- make package-openshell-results
+name=${OPENSHELL_SANDBOX:?set it to the sandbox name}
+evals=$(cd "$(dirname "$0")/.." && pwd)
+workdir=/tmp/$(basename "$(cd "$evals/../.." && pwd)")/rds-policy/evals
 
-mkdir -p "$evals_dir/results/$OPENSHELL_SANDBOX"
-openshell sandbox download "$OPENSHELL_SANDBOX" "$sandbox_results" "$evals_dir/results/$OPENSHELL_SANDBOX"
-ln -sfn "$OPENSHELL_SANDBOX" "$evals_dir/results/latest"
+openshell sandbox exec --name "$name" --no-tty --workdir "$workdir" -- make package-openshell-results
 
-echo "Results: $evals_dir/results/$OPENSHELL_SANDBOX"
+mkdir -p "$evals/results/$name"
+openshell sandbox download "$name" /sandbox/rds-eval-results "$evals/results/$name"
+ln -sfn "$name" "$evals/results/latest"
+
+echo "Results: $evals/results/$name"
