@@ -25,6 +25,10 @@ defaults. `scripts/openshell-eval.sh` loads `.env` when present; Git ignores
 it. Every `make openshell-<cmd>` target is a one-line wrapper around that
 script's subcommands, so CI can call either.
 
+Each subcommand is a single `openshell` command written out in full. The CLI
+reads the gateway from `OPENSHELL_GATEWAY`, so no command carries a `-g` flag
+and you can copy one out of the script and run it by hand.
+
 ## One-time: register the Vertex provider
 
 ```sh

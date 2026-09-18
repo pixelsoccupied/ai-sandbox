@@ -81,7 +81,7 @@ package-openshell-results:
 
 # `make openshell-<cmd>` runs `scripts/openshell-eval.sh <cmd>`; see the script
 # header for the commands. Settings given to make are passed through.
-export OPENSHELL OPENSHELL_GATEWAY OPENSHELL_SANDBOX OPENSHELL_PROVIDER \
+export OPENSHELL_GATEWAY OPENSHELL_SANDBOX OPENSHELL_PROVIDER \
 	VERTEX_AI_PROJECT_ID VERTEX_AI_REGION PROMPTFOO_EVAL_ARGS PROMPTFOO_CONCURRENCY
 openshell-%:
 	@scripts/openshell-eval.sh $*
