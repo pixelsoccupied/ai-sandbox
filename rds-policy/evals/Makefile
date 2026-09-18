@@ -39,9 +39,9 @@ eval-repeat: preflight ## Run all evals 3x to measure variance
 eval-view: ## View eval results in browser
 	npx promptfoo view
 
-lint: ## Lint Python assertion files and the OpenShell lifecycle script
+lint: ## Lint Python assertion files and the OpenShell scripts
 	cd ../.. && uv run ruff check rds-policy/evals/assertions/
-	shellcheck scripts/openshell-eval.sh
+	shellcheck -x scripts/*.sh
 
 clean: ## Clear eval cache
 	npx promptfoo cache clear
@@ -77,14 +77,14 @@ package-openshell-results:
 	@[ ! -d /tmp/.promptfoo ] || cp -R /tmp/.promptfoo "$(SANDBOX_RESULTS_DIR)/promptfoo-state"
 	@for path in /tmp/rds-merge-*; do [ ! -e "$$path" ] || cp -R "$$path" "$(SANDBOX_RESULTS_DIR)/"; done
 
-# ---- Host-side lifecycle lives in scripts/openshell-eval.sh (reads .env) ----
+# ---- Host-side steps are one small script each in scripts/ (they read .env) ----
 
-# `make openshell-<cmd>` runs `scripts/openshell-eval.sh <cmd>`; see the script
-# header for the commands. Settings given to make are passed through.
+# `make openshell-deploy` runs `scripts/deploy.sh`, and so on. The scripts also
+# run directly; settings given to make are passed through to them.
 export OPENSHELL_GATEWAY OPENSHELL_SANDBOX OPENSHELL_PROVIDER \
 	VERTEX_AI_PROJECT_ID VERTEX_AI_REGION PROMPTFOO_EVAL_ARGS PROMPTFOO_CONCURRENCY
 openshell-%:
-	@scripts/openshell-eval.sh $*
+	@scripts/$*.sh
 
 openshell-view: ## View downloaded results with the preserved Promptfoo database
 	@test -f "$(OPENSHELL_RESULTS_DIR)/promptfoo-state/promptfoo.db" || { echo "no downloaded Promptfoo database in $(OPENSHELL_RESULTS_DIR)" >&2; exit 1; }
@@ -92,4 +92,4 @@ openshell-view: ## View downloaded results with the preserved Promptfoo database
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-28s\033[0m %s\n", $$1, $$2}'
-	@printf '\033[36m%-28s\033[0m %s\n' 'openshell-<cmd>' 'OpenShell lifecycle: provider, e2e, run, status, finish, create, upload, start, wait, collect, teardown (scripts/openshell-eval.sh)'
+	@printf '\033[36m%-28s\033[0m %s\n' 'openshell-<script>' 'Run scripts/<script>.sh: e2e, provider, deploy, status, wait, collect, undeploy'

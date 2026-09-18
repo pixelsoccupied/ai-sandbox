@@ -21,13 +21,22 @@ $EDITOR .env
 ```
 
 The gateway name and project ID are runtime configuration, not repository
-defaults. `scripts/openshell-eval.sh` loads `.env` when present; Git ignores
-it. Every `make openshell-<cmd>` target is a one-line wrapper around that
-script's subcommands, so CI can call either.
+defaults. The scripts in `scripts/` load `.env` when present; Git ignores it.
 
-Each subcommand is a single `openshell` command written out in full. The CLI
-reads the gateway from `OPENSHELL_GATEWAY`, so no command carries a `-g` flag
-and you can copy one out of the script and run it by hand.
+Each step is its own small script, and `make openshell-<name>` just runs
+`scripts/<name>.sh`, so CI can call either. The scripts hold nothing but
+`openshell` commands: the CLI reads the gateway from `OPENSHELL_GATEWAY`, so no
+command carries a `-g` flag and you can copy one out and run it by hand.
+
+| Script | What it does |
+| --- | --- |
+| `provider.sh` | one-time: store your gcloud ADC on the gateway |
+| `deploy.sh` | create the sandbox, upload the checkout, start the eval |
+| `status.sh` | is it still running? tail of the log |
+| `wait.sh` | block until it finishes, exit with the eval's code |
+| `collect.sh` | download the results into `results/<sandbox>/` |
+| `undeploy.sh` | delete the sandbox |
+| `e2e.sh` | all of the above in order |
 
 ## One-time: register the Vertex provider
 
@@ -58,7 +67,7 @@ One-test smoke run:
 make openshell-e2e PROMPTFOO_EVAL_ARGS='--filter-first-n 1'
 ```
 
-`openshell-e2e` names the sandbox `rds-<MMDD-HHMMSS>`, creates it, uploads the
+`e2e.sh` names the sandbox `rds-<MMDD-HHMMSS>`, creates it, uploads the
 checkout (honoring `.gitignore`, so `node_modules`, `.venv`, and `results/`
 stay local), starts the install-and-eval job, polls until it exits, downloads
 the results, and deletes the sandbox. If the download fails the sandbox is kept
@@ -67,9 +76,10 @@ and the command to retry is printed.
 For a long run you do not want to babysit:
 
 ```sh
-make openshell-run OPENSHELL_SANDBOX=rds-full      # create, upload, start
-make openshell-status OPENSHELL_SANDBOX=rds-full   # running? tail of the log
-make openshell-finish OPENSHELL_SANDBOX=rds-full   # download, delete
+make openshell-deploy OPENSHELL_SANDBOX=rds-full     # create, upload, start
+make openshell-status OPENSHELL_SANDBOX=rds-full     # running? tail of the log
+make openshell-collect OPENSHELL_SANDBOX=rds-full    # download the results
+make openshell-undeploy OPENSHELL_SANDBOX=rds-full   # delete the sandbox
 ```
 
 Install and eval run as one detached job inside the sandbox, polled with short
