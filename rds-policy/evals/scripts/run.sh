@@ -5,6 +5,8 @@
 # export OPENSHELL_GATEWAY=<gateway>   # the openshell CLI reads this itself
 # Set OPENSHELL_SANDBOX to name the sandbox, otherwise rds-<MMDD-HHMMSS>.
 # Set PROMPTFOO_EVAL_ARGS='--filter-first-n 1' for a one-test smoke run.
+# Set OPENSHELL_IMAGE to override the sandbox image (default: the community
+# `base`, which ships uv, Python 3.14 and node already).
 set -euo pipefail
 
 here=$(dirname "$0")
@@ -13,6 +15,7 @@ repo=$(cd "$evals/../.." && pwd)
 name=${OPENSHELL_SANDBOX:-rds-$(date +%m%d-%H%M%S)}
 workdir=/tmp/$(basename "$repo")/rds-policy/evals
 provider=${OPENSHELL_PROVIDER:-rds-vertex}
+image=${OPENSHELL_IMAGE:-base}
 
 [ "${#name}" -le 19 ] || {
   echo "sandbox name '$name' is over 19 characters" >&2
@@ -26,9 +29,9 @@ openshell provider get "$provider" >/dev/null 2>&1 || {
 # Env set at create is visible to every later exec, so the commands below do not
 # repeat it. CLAUDE_CODE_SKIP_VERTEX_AUTH makes the agent send the provider's
 # placeholder token; the sandbox proxy swaps in the real credential.
-openshell sandbox create --name "$name" --provider "$provider" \
+openshell sandbox create --name "$name" --provider "$provider" --from "$image" \
   --policy "$evals/openshell-policy.yaml" \
-  --env HOME=/tmp --env CLAUDE_CODE_USE_VERTEX=1 --env CLAUDE_CODE_SKIP_VERTEX_AUTH=1 \
+  --env CLAUDE_CODE_USE_VERTEX=1 --env CLAUDE_CODE_SKIP_VERTEX_AUTH=1 \
   --env SANDBOX_RESULTS_DIR=/sandbox/rds-eval-results \
   --no-tty --detach -- sleep infinity
 
@@ -43,7 +46,7 @@ openshell sandbox upload "$name" "$repo" /tmp || {
 openshell sandbox exec --name "$name" --no-tty --workdir "$workdir" \
   --env PROMPTFOO_EVAL_ARGS="${PROMPTFOO_EVAL_ARGS:-}" \
   --env PROMPTFOO_CONCURRENCY="${PROMPTFOO_CONCURRENCY:-3}" \
-  -- sh -lc 'mkdir -p "$SANDBOX_RESULTS_DIR"; nohup make eval-openshell-recorded >/dev/null 2>&1 </dev/null & echo $! >"$SANDBOX_RESULTS_DIR/pid"; echo "eval started (pid $!)"' || {
+  -- sh -lc 'unset VIRTUAL_ENV; mkdir -p "$SANDBOX_RESULTS_DIR"; nohup make eval-openshell-recorded >/dev/null 2>&1 </dev/null & echo $! >"$SANDBOX_RESULTS_DIR/pid"; echo "eval started (pid $!)"' || {
   OPENSHELL_SANDBOX=$name "$here/clean.sh"
   exit 1
 }

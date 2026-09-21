@@ -1,5 +1,5 @@
 .PHONY: setup preflight eval eval-repeat eval-view lint clean \
-	setup-openshell eval-openshell eval-openshell-recorded package-openshell-results \
+	eval-openshell eval-openshell-recorded package-openshell-results \
 	openshell-view help
 
 REPO_ROOT := $(abspath ../..)
@@ -46,13 +46,7 @@ lint: ## Lint Python assertion files and the OpenShell scripts
 clean: ## Clear eval cache
 	npx promptfoo cache clear
 
-# ---- Targets below run inside the sandbox (started by `openshell-start`) ----
-
-# The image ships Python 3.13 and no uv; the project needs 3.14, so install both under /tmp.
-setup-openshell:
-	python3 -m pip install --user uv
-	PATH="$$HOME/.local/bin:$$PATH" uv python install 3.14 --install-dir /tmp/uv-python
-	PATH="$$HOME/.local/bin:$$PATH" UV_PYTHON_INSTALL_DIR=/tmp/uv-python UV_PYTHON_DOWNLOADS=never $(MAKE) setup
+# ---- Targets below run inside the sandbox (started by `scripts/run.sh`) ----
 
 # The attached provider injects a placeholder in GOOGLE_VERTEX_AI_TOKEN and the
 # sandbox proxy swaps in the real short-lived credential on requests to Vertex.
@@ -69,7 +63,7 @@ eval-openshell: preflight
 # Detached job: install, run, record the exit code for run.sh to poll.
 eval-openshell-recorded:
 	@mkdir -p "$(SANDBOX_RESULTS_DIR)"; \
-	{ $(MAKE) setup-openshell && $(MAKE) eval-openshell; } >"$(SANDBOX_RESULTS_DIR)/eval.log" 2>&1; \
+	{ $(MAKE) setup && $(MAKE) eval-openshell; } >"$(SANDBOX_RESULTS_DIR)/eval.log" 2>&1; \
 	printf '%s\n' "$$?" >"$(SANDBOX_RESULTS_DIR)/exit-code"
 
 package-openshell-results:

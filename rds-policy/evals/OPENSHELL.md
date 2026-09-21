@@ -116,7 +116,11 @@ policy applies instead; `openshell policy get <sandbox>` shows which one is in
 effect. Either way the eval needs egress to Vertex, the npm registry, PyPI, and
 GitHub release assets.
 
-The sandbox image (`quay.io/telco5gci/sandbox`) ships Python 3.13 and node but
-no uv, and the project requires Python 3.14, so `setup-openshell` installs uv
-and CPython under `/tmp` before `make setup`. Baking those into the image would
-remove that step.
+`run.sh` creates the sandbox from the OpenShell community `base` image
+(`--from base`), which already ships uv, Python 3.14, node and git, so the run
+goes straight to `make setup`. Override with `OPENSHELL_IMAGE` if you need the
+gateway's own default (on `ooo`-provisioned gateways that is
+`quay.io/telco5gci/sandbox`, which has Python 3.13 and no uv, and will not work
+without reinstating an install step). Base also exports
+`VIRTUAL_ENV=/sandbox/.venv`; `run.sh` unsets it so `uv sync` uses the project's
+own venv.
