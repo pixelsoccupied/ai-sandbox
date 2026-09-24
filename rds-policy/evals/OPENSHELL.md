@@ -68,7 +68,9 @@ make openshell-run PROMPTFOO_EVAL_ARGS='--filter-first-n 1'
 (honoring `.gitignore`, so `node_modules`, `.venv`, and `results/` stay local),
 starts the install-and-eval job, polls until it exits, downloads the results,
 and deletes the sandbox. It exits with the eval's own code. Pass
-`OPENSHELL_SANDBOX` to choose the name.
+`OPENSHELL_SANDBOX` to choose the name, and `OPENSHELL_KEEP=1` to keep the
+sandbox running after the download so you can look around in it; delete it
+with `make openshell-clean` when you are done.
 
 Install and eval run as one detached job inside the sandbox, polled with short
 `sandbox exec` calls, because attached exec streams are cut by the OpenShift

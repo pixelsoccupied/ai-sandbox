@@ -7,6 +7,7 @@
 # Set PROMPTFOO_EVAL_ARGS='--filter-first-n 1' for a one-test smoke run.
 # Set OPENSHELL_IMAGE to override the sandbox image (default: the community
 # `base`, which ships uv, Python 3.14 and node already).
+# Set OPENSHELL_KEEP=1 to keep the sandbox after collecting, to look around in it.
 set -euo pipefail
 
 here=$(dirname "$0")
@@ -85,5 +86,9 @@ OPENSHELL_SANDBOX=$name "$here/collect.sh" || {
   echo "results not collected; $name kept. Retry: OPENSHELL_SANDBOX=$name scripts/collect.sh" >&2
   exit 1
 }
-OPENSHELL_SANDBOX=$name "$here/clean.sh"
+if [ -n "${OPENSHELL_KEEP:-}" ]; then
+  echo "$name kept. Delete it with: OPENSHELL_SANDBOX=$name scripts/clean.sh"
+else
+  OPENSHELL_SANDBOX=$name "$here/clean.sh"
+fi
 exit "$status"

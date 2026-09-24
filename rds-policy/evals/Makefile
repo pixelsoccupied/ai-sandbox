@@ -68,7 +68,7 @@ eval-openshell-recorded:
 
 package-openshell-results:
 	@mkdir -p "$(SANDBOX_RESULTS_DIR)"
-	@[ ! -d /tmp/.promptfoo ] || cp -R /tmp/.promptfoo "$(SANDBOX_RESULTS_DIR)/promptfoo-state"
+	@[ ! -d "$$HOME/.promptfoo" ] || cp -R "$$HOME/.promptfoo" "$(SANDBOX_RESULTS_DIR)/promptfoo-state"
 	@for path in /tmp/rds-merge-*; do [ ! -e "$$path" ] || cp -R "$$path" "$(SANDBOX_RESULTS_DIR)/"; done
 
 # ---- Host-side steps: one small script each in scripts/ ----
