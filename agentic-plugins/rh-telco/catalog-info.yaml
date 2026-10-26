@@ -4,7 +4,8 @@ metadata:
   name: rh-telco
   title: Red Hat Telco Agentic Plugin
   description: >
-    Points to all AI skill catalog entities in the rh-telco plugin.
+    Points to all AI skill catalog entities in the rh-telco agentic pack
+    for OpenShift telco RAN and Core Day 2 policy updates.
   annotations:
     agentic.redhat.com/lola-module: "true"
     agentic.redhat.com/lola-module-name: rh-telco
