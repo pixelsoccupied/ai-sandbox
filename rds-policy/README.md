@@ -94,6 +94,6 @@ make build
 
 ## Docs
 
-- [DESIGN.md](docs/DESIGN.md) — architecture and design
-- [EVAL.md](docs/EVAL.md) — eval plan and framework
 - [HOOKS.md](docs/HOOKS.md) — validation hook details and what it catches
+- [evals/README.md](evals/README.md) — what the evals test and how to run them
+- [EVAL_AUTOMATION.md](docs/EVAL_AUTOMATION.md) — plan for running the evals automatically
